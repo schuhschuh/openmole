@@ -19,23 +19,36 @@ package org.openmole.core.batch.refresh
 
 import akka.actor.{ Actor, ActorRef }
 import org.openmole.core.implementation.tools.objectToSomeObjectConverter
+import org.openmole.core.model.execution.ExecutionState
 import org.openmole.misc.tools.service.Logger
-import org.openmole.misc.workspace.Workspace
+import org.openmole.misc.workspace.{ ConfigurationLocation, Workspace }
 import org.openmole.core.batch.environment.BatchEnvironment
 
-object KillerActor extends Logger
+object KillerActor extends Logger {
+  val maxKillAttempts = new ConfigurationLocation("JobManager", "MaxKillAttempts")
+  Workspace += (maxKillAttempts, "3")
+}
 
 import KillerActor.Log._
+import KillerActor._
 
 class KillerActor(jobManager: ActorRef) extends Actor {
   def receive = withRunFinalization {
-    case msg @ KillBatchJob(bj) ⇒
-      try bj.jobService.tryWithToken {
-        case Some(t) ⇒ bj.kill(t)
-        case None ⇒
-          jobManager ! Delay(msg, Workspace.preferenceAsDuration(BatchEnvironment.NoTokenForServiceRetryInterval))
-      } catch {
-        case e: Throwable ⇒ logger.log(FINE, "Could not kill job.", e)
+    case msg @ KillBatchJob(bj, killAttempts) ⇒
+      if (killAttempts < Workspace.preferenceAsInt(maxKillAttempts) && bj.state != ExecutionState.KILLED) {
+        try bj.jobService.tryWithToken {
+          case Some(t) ⇒ {
+            bj.kill(t)
+            println(s"Attempted to kill ${bj} ${killAttempts} time(s)")
+            // job state will keep on getting refreshed by Refresh actor if necessary
+            // just plan a later new attempt that will eventually end the process
+            jobManager ! Delay(KillBatchJob(bj, killAttempts - 1), bj.jobService.environment.minUpdateInterval)
+          }
+          case None ⇒
+            jobManager ! Delay(msg, Workspace.preferenceAsDuration(BatchEnvironment.NoTokenForServiceRetryInterval))
+        } catch {
+          case e: Throwable ⇒ logger.log(FINE, "Could not kill job.", e)
+        }
       }
   }
 }

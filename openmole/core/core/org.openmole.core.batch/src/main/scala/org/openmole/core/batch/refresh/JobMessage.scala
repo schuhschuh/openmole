@@ -34,7 +34,7 @@ case class Resubmit(job: BatchExecutionJob, storage: StorageService) extends Job
 case class Delay(msg: JobMessage, delay: FiniteDuration) extends JobMessage
 case class Error(job: BatchExecutionJob, exception: Throwable) extends JobMessage
 case class Kill(job: BatchExecutionJob) extends JobMessage
-case class KillBatchJob(batchJob: BatchJob) extends JobMessage
+case class KillBatchJob(batchJob: BatchJob, killAttempts: Int) extends JobMessage
 case class GetResult(job: BatchExecutionJob, serializedJob: SerializedJob, outputFilePath: String) extends JobMessage
 case class Manage(job: BatchExecutionJob) extends JobMessage
 case class MoleJobError(moleJob: IMoleJob, job: BatchExecutionJob, exception: Throwable) extends JobMessage

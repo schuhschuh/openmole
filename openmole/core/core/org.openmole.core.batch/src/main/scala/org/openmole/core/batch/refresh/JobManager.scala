@@ -95,7 +95,8 @@ akka {
       self ! Delay(Refresh(job, sj, bj, job.environment.minUpdateInterval), job.environment.minUpdateInterval)
 
     case Kill(job) ⇒
-      job.state = ExecutionState.KILLED
+      // job state will be set to Killed by BatchJob.kill
+      //      job.state = ExecutionState.KILLED
       killAndClean(job)
 
     case Resubmit(job, storage) ⇒
@@ -119,7 +120,9 @@ akka {
   }
 
   def killAndClean(job: BatchExecutionJob) {
-    job.batchJob.foreach(bj ⇒ self ! KillBatchJob(bj))
+    // schedule the maximum number of kill attempts
+    // ref to the batch can then be dismissed as it'll be propagated in actor messages
+    job.batchJob.foreach(bj ⇒ self ! KillBatchJob(bj, Workspace.preferenceAsInt(KillerActor.maxKillAttempts)))
     job.batchJob = None
     job.serializedJob.foreach(j ⇒ self ! CleanSerializedJob(j))
     job.serializedJob = None
